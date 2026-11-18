@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Assistant Campus</title>
+  
+  <!-- 1. On charge Firebase en mode "Compat" (indispensable pour FirebaseUI) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  
+  <!-- 2. On charge FirebaseUI -->
+  <script src="https://www.gstatic.com/firebasejs/ui/6.1.0/firebase-ui-auth.js"></script>
+  <link type="text/css" rel="stylesheet" href="https://www.gstatic.com/firebasejs/ui/6.1.0/firebase-ui-auth.css" />
+  
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 600px; margin: 40px auto; padding: 0 16px; }
+    h2 { color: #1a73e8; }
+    #chat { display: none; }
+    #messages { background: #f5f5f5; padding: 16px; border-radius: 12px; min-height: 120px; white-space: pre-wrap; font-family: monospace; }
+    #input-area { display: flex; gap: 8px; margin-top: 12px; }
+    #input-area input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
+    #input-area button { padding: 12px 24px; background: #1a73e8; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; }
+    #input-area button:disabled { background: #aaa; cursor: wait; }
+    #logout { color: #1a73e8; }
+  </style>
+</head>
+<body>
+  <h2>Assistant Campus</h2>
+  
+  <div id="firebaseui-auth-container"></div>
+  
+  <div id="chat">
+    <p>Connecté : <span id="email"></span> — <a href="#" id="logout">Déconnexion</a></p>
+    <div id="messages">Prêt.</div>
+    <div id="input-area">
+      <input id="msg" placeholder="Ex : Consulte Computer Architecture, trouve le prof et rédige un mot." />
+      <button id="send">Envoyer</button>
+    </div>
+  </div>
+
+  <!-- 3. On retire type="module" car on utilise les variables globales -->
+  <script>
+    // Ta configuration Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyDP-eerTLeLEUCk0M63di201Sed6GyIBtk",
+      authDomain: "assistant-campus.firebaseapp.com",
+      projectId: "assistant-campus",
+      storageBucket: "assistant-campus.firebasestorage.app",
+      messagingSenderId: "192280211781",
+      appId: "1:192280211781:web:5371ed9447e2e2e0818e2c",
+      measurementId: "G-RF4XZYXDW6"
+    };
+
+    // Ton URL Worker
+    const WORKER_URL = "https://assistant-campus-agent.njomedavid26.workers.dev";
+
+    // Initialisation avec la syntaxe Compat
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+
+    // Configuration de FirebaseUI
+    const uiConfig = {
+      signInSuccessUrl: '/',
+      signInOptions: [firebase.auth.EmailAuthProvider.PROVIDER_ID]
+    };
+    const ui = new firebaseui.auth.AuthUI(auth);
+    ui.start('#firebaseui-auth-container', uiConfig);
+
+    // Écouteur de connexion
+    auth.onAuthStateChanged((user) => {
+      document.getElementById('firebaseui-auth-container').style.display = user ? 'none' : 'block';
+      document.getElementById('chat').style.display = user ? 'block' : 'none';
+      if (user) document.getElementById('email').textContent = user.email;
+    });
+
+    // Bouton Déconnexion
+    document.getElementById('logout').addEventListener('click', (e) => {
+      e.preventDefault();
+      auth.signOut();
+    });
+
+    // Bouton Envoyer
+    document.getElementById('send').addEventListener('click', async () => {
+      const msg = document.getElementById('msg').value.trim();
+      if (!msg) return;
+      const messages = document.getElementById('messages');
+      const btn = document.getElementById('send');
+      messages.textContent = 'Réflexion…';
+      btn.disabled = true;
+
+      try {
+        const user = auth.currentUser;
+        if (!user) throw new Error("Non connecté");
+        const idToken = await user.getIdToken();
+
+        const resp = await fetch(WORKER_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: msg, idToken })
+        });
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+        messages.textContent = data.reply;
+      } catch (e) {
+        messages.textContent = 'Erreur : ' + e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
